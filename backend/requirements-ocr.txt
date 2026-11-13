@@ -1,0 +1,6 @@
+# OCR is an optional CPU-heavy extra. Keep the default installation lightweight.
+# Tested model/runtime versions must be selected for the deployment Python/platform.
+PaddleOCR==2.9.1
+paddlepaddle==2.6.2
+Pillow==10.4.0
+numpy==1.26.4

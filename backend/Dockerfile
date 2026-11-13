@@ -1,0 +1,12 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.1
+pydantic==2.9.2
+pydantic-settings==2.4.0
+sqlalchemy==2.0.35
+psycopg[binary]==3.2.1
+redis==5.0.8
+PyJWT==2.9.0
+python-multipart==0.0.9
+python-dotenv==1.0.1
+httpx==0.27.2
+rq==1.16.2
