@@ -11,7 +11,6 @@ from app.db import Base
 
 class User(Base):
     __tablename__ = "users"
-
     id: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
     username: Mapped[str] = mapped_column(String(128), unique=True, index=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -21,7 +20,6 @@ class User(Base):
 
 class Company(Base):
     __tablename__ = "companies"
-
     id: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
     canonical_name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
@@ -31,7 +29,6 @@ class Company(Base):
 
 class Project(Base):
     __tablename__ = "projects"
-
     id: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -44,7 +41,6 @@ class Project(Base):
 
 class ProjectFile(Base):
     __tablename__ = "project_files"
-
     id: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
     project_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
     file_type: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -62,7 +58,6 @@ class ProjectFile(Base):
 
 class RuleVersion(Base):
     __tablename__ = "rule_versions"
-
     id: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
     rule_key: Mapped[str] = mapped_column(String(128), index=True, nullable=False)
     version: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -78,7 +73,6 @@ class RuleVersion(Base):
 
 class ReviewRun(Base):
     __tablename__ = "review_runs"
-
     id: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
     project_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="queued", nullable=False)
@@ -93,7 +87,6 @@ class ReviewRun(Base):
 
 class Finding(Base):
     __tablename__ = "findings"
-
     id: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
     review_run_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
     project_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
@@ -112,7 +105,6 @@ class Finding(Base):
 
 class Evidence(Base):
     __tablename__ = "evidence"
-
     id: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
     finding_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
     file_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
@@ -124,9 +116,22 @@ class Evidence(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
 
+class Annotation(Base):
+    __tablename__ = "annotations"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
+    finding_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    file_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    page_number: Mapped[int] = mapped_column(nullable=False)
+    bbox: Mapped[list] = mapped_column(JSON, nullable=False)
+    label: Mapped[str] = mapped_column(String(500), nullable=False)
+    source: Mapped[str] = mapped_column(String(20), default="manual", nullable=False)
+    supersedes_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_by: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+
 class ReviewAction(Base):
     __tablename__ = "review_actions"
-
     id: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
     finding_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
     actor_id: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -139,7 +144,6 @@ class ReviewAction(Base):
 
 class AuditEvent(Base):
     __tablename__ = "audit_events"
-
     id: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
     actor_id: Mapped[str] = mapped_column(String(64), nullable=False)
     action: Mapped[str] = mapped_column(String(120), nullable=False)

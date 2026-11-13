@@ -5,21 +5,23 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.auth import router as auth_router
 from app.api.routes.companies import router as companies_router
+from app.api.routes.documents import router as documents_router
 from app.api.routes.health import router as health_router
 from app.api.routes.projects import router as projects_router
+from app.api.routes.reviews import router as reviews_router
 from app.api.routes.rules import router as rules_router
 from app.config import settings
 from app.db import Base, SessionLocal, engine
 from app.services import ensure_admin_user
 
-app = FastAPI(title="PDF 招投标审查系统", version="0.1.0")
-
+app = FastAPI(title="PDF 招投标审查系统", version="0.3.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Idempotency-Key"],
+    expose_headers=["X-PDF-Page-Width", "X-PDF-Page-Height"],
 )
 
 
@@ -33,11 +35,8 @@ def startup_event() -> None:
         db.close()
 
 
-app.include_router(health_router, prefix="/api/v1")
-app.include_router(auth_router, prefix="/api/v1")
-app.include_router(projects_router, prefix="/api/v1")
-app.include_router(companies_router, prefix="/api/v1")
-app.include_router(rules_router, prefix="/api/v1")
+for route in (health_router, auth_router, projects_router, companies_router, rules_router, reviews_router, documents_router):
+    app.include_router(route, prefix="/api/v1")
 
 
 @app.get("/")
