@@ -1,47 +1,34 @@
-from __future__ import annotations
+# PDF 招投标审查系统
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+本仓库按《PDF 招投标审查系统技术方案与实施计划》迭代，当前开发分支实现 FastAPI + SQLAlchemy 后端和 React + TypeScript + Vite 前端基础流程。
 
-from app.api.routes.auth import router as auth_router
-from app.api.routes.companies import router as companies_router
-from app.api.routes.health import router as health_router
-from app.api.routes.projects import router as projects_router
-from app.api.routes.reviews import router as reviews_router
-from app.api.routes.rules import router as rules_router
-from app.config import settings
-from app.db import Base, SessionLocal, engine
-from app.services import ensure_admin_user
+## 当前能力
 
-app = FastAPI(title="PDF 招投标审查系统", version="0.2.0")
+- 登录后访问项目、文件和审查结果
+- 上传 PDF 并记录 SHA-256、页数与 PDF 类型
+- 创建审查运行并查询 Finding / Evidence
+- 人工复核：确认问题、确认无问题、无法判断；保存备注及历史记录
+- 导出 JSON / HTML 审查报告
+- Docker Compose 配置 PostgreSQL、Redis、API 和 Worker
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins_list,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"] ,
-)
+## 本地开发
 
+复制 `.env.example` 为 `.env` 并设置强密钥和管理员密码。当前后端示例开发配置使用环境变量初始化单一管理员，不开放公开注册。
 
-@app.on_event("startup")
-def startup_event() -> None:
-    Base.metadata.create_all(bind=engine)
-    db = SessionLocal()
-    try:
-        ensure_admin_user(db)
-    finally:
-        db.close()
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
 
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-app.include_router(health_router, prefix="/api/v1")
-app.include_router(auth_router, prefix="/api/v1")
-app.include_router(projects_router, prefix="/api/v1")
-app.include_router(companies_router, prefix="/api/v1")
-app.include_router(rules_router, prefix="/api/v1")
-app.include_router(reviews_router, prefix="/api/v1")
+打开 `http://localhost:5173`，API 文档位于 `http://localhost:8000/docs`。
 
-
-@app.get("/")
-def root() -> dict[str, str]:
-    return {"message": "PDF 招投标审查系统 API 已启动"}
+> 当前规则结果/部分识别证据仍为演示性实现，不能替代业务审查或法律意见。上传与解析验收应使用已授权、脱敏的 PDF 样本。
