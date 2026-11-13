@@ -1,57 +1,47 @@
-import hashlib
-import os
-import uuid
-from pathlib import Path
-from typing import Iterable
+from __future__ import annotations
 
-from fastapi import HTTPException, UploadFile, status
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
+from app.api.routes.auth import router as auth_router
+from app.api.routes.companies import router as companies_router
+from app.api.routes.health import router as health_router
+from app.api.routes.projects import router as projects_router
 from app.config import settings
+from app.db import Base, SessionLocal, engine
+from app.services import ensure_admin_user
+
+app = FastAPI(title="PDF 招投标审查系统", version="0.1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
-def hash_password(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+@app.on_event("startup")
+def startup_event() -> None:
+    Base.metadata.create_all(bind=engine)
+    with engine.begin() as conn:
+        conn.execute(text("SELECT 1"))
+
+    db = SessionLocal()
+    try:
+        ensure_admin_user(db)
+    finally:
+        db.close()
 
 
-def create_storage_dirs() -> None:
-    for directory in [settings.upload_dir, settings.render_dir, settings.report_dir]:
-        Path(directory).mkdir(parents=True, exist_ok=True)
+app.include_router(health_router, prefix="/api/v1")
+app.include_router(auth_router, prefix="/api/v1")
+app.include_router(projects_router, prefix="/api/v1")
+app.include_router(companies_router, prefix="/api/v1")
 
 
-def generate_id(prefix: str) -> str:
-    return f"{prefix}_{uuid.uuid4().hex[:12]}"
-
-
-def validate_pdf(file: UploadFile, project_id: str) -> None:
-    if file.filename is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing file name")
-    if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only PDF files are allowed")
-    if file.size and file.size > settings.max_file_size:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File exceeds size limit")
-
-
-def sha256_bytes(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def ensure_project_dir(project_id: str) -> Path:
-    root = Path(settings.upload_dir) / project_id
-    root.mkdir(parents=True, exist_ok=True)
-    return root
-
-
-def build_mock_review_findings(file_ids: Iterable[str]) -> list[dict]:
-    findings: list[dict] = []
-    for index, file_id in enumerate(file_ids, start=1):
-        findings.append(
-            {
-                "file_id": file_id,
-                "category": "seal" if index % 2 == 1 else "format",
-                "message": "检测到潜在签章或格式问题，需人工复核。" if index % 2 == 1 else "文档缺少必要的页面信息或结构特征，建议人工确认。",
-                "severity": "medium" if index % 2 == 1 else "low",
-                "confidence": 0.72 if index % 2 == 1 else 0.61,
-                "source": "mock_rules",
-            }
-        )
-    return findings
+@app.get("/")
+def root() -> dict[str, str]:
+    return {"message": "PDF 招投标审查系统 API 已启动"}

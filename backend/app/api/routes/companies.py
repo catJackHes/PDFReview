@@ -9,19 +9,34 @@ from sqlalchemy.orm import Session
 from app.auth import create_storage_dirs, ensure_project_dir, generate_id, sha256_bytes, validate_pdf
 from app.db import get_db
 from app.models import Project, ProjectFile, ReviewRun, Finding
-from app.schemas import FileUploadResponse, ProjectCreate, ProjectOut, ProjectUpdate, ReviewRequest, ReviewRunOut, FindingOut
+from app.schemas import (
+    FileUploadResponse,
+    FindingOut,
+    ProjectCreate,
+    ProjectOut,
+    ProjectUpdate,
+    ReviewRequest,
+    ReviewRunOut,
+)
 from app.services import get_current_user
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 
 @router.get("", response_model=list[ProjectOut])
-def list_projects(db: Session = Depends(get_db), current_user: Any = Depends(get_current_user)) -> list[Project]:
+def list_projects(
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_user),
+) -> list[Project]:
     return db.query(Project).filter(Project.created_by == current_user.username).order_by(Project.created_at.desc()).all()
 
 
 @router.post("", response_model=ProjectOut)
-def create_project(payload: ProjectCreate, db: Session = Depends(get_db), current_user: Any = Depends(get_current_user)) -> Project:
+def create_project(
+    payload: ProjectCreate,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_user),
+) -> Project:
     project = Project(
         id=generate_id("project"),
         name=payload.name,
@@ -37,7 +52,11 @@ def create_project(payload: ProjectCreate, db: Session = Depends(get_db), curren
 
 
 @router.get("/{project_id}", response_model=ProjectOut)
-def get_project(project_id: str, db: Session = Depends(get_db), current_user: Any = Depends(get_current_user)) -> Project:
+def get_project(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_user),
+) -> Project:
     project = db.query(Project).filter(Project.id == project_id, Project.created_by == current_user.username).first()
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
@@ -45,7 +64,12 @@ def get_project(project_id: str, db: Session = Depends(get_db), current_user: An
 
 
 @router.patch("/{project_id}", response_model=ProjectOut)
-def update_project(project_id: str, payload: ProjectUpdate, db: Session = Depends(get_db), current_user: Any = Depends(get_current_user)) -> Project:
+def update_project(
+    project_id: str,
+    payload: ProjectUpdate,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_user),
+) -> Project:
     project = db.query(Project).filter(Project.id == project_id, Project.created_by == current_user.username).first()
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
@@ -100,7 +124,11 @@ async def upload_file(
 
 
 @router.get("/{project_id}/files", response_model=list[FileUploadResponse])
-def list_files(project_id: str, db: Session = Depends(get_db), current_user: Any = Depends(get_current_user)) -> list[ProjectFile]:
+def list_files(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_user),
+) -> list[ProjectFile]:
     project = db.query(Project).filter(Project.id == project_id, Project.created_by == current_user.username).first()
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
@@ -108,7 +136,12 @@ def list_files(project_id: str, db: Session = Depends(get_db), current_user: Any
 
 
 @router.post("/{project_id}/reviews", response_model=ReviewRunOut)
-def create_review(project_id: str, payload: ReviewRequest, db: Session = Depends(get_db), current_user: Any = Depends(get_current_user)) -> ReviewRun:
+def create_review(
+    project_id: str,
+    payload: ReviewRequest,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_user),
+) -> ReviewRun:
     project = db.query(Project).filter(Project.id == project_id, Project.created_by == current_user.username).first()
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
@@ -117,6 +150,7 @@ def create_review(project_id: str, payload: ReviewRequest, db: Session = Depends
         id=generate_id("review"),
         project_id=project_id,
         status="queued",
+        started_at=datetime.now(timezone.utc),
         config_snapshot={"rule_set": payload.rule_set, "options": payload.options},
         created_by=current_user.username,
     )
@@ -152,7 +186,11 @@ def create_review(project_id: str, payload: ReviewRequest, db: Session = Depends
 
 
 @router.get("/{project_id}/reviews", response_model=list[ReviewRunOut])
-def list_reviews(project_id: str, db: Session = Depends(get_db), current_user: Any = Depends(get_current_user)) -> list[ReviewRun]:
+def list_reviews(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_user),
+) -> list[ReviewRun]:
     project = db.query(Project).filter(Project.id == project_id, Project.created_by == current_user.username).first()
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
@@ -160,9 +198,13 @@ def list_reviews(project_id: str, db: Session = Depends(get_db), current_user: A
 
 
 @router.get("/{project_id}/reviews/{review_id}/findings", response_model=list[FindingOut])
-def list_findings(project_id: str, review_id: str, db: Session = Depends(get_db), current_user: Any = Depends(get_current_user)) -> list[Finding]:
+def list_findings(
+    project_id: str,
+    review_id: str,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_user),
+) -> list[Finding]:
     project = db.query(Project).filter(Project.id == project_id, Project.created_by == current_user.username).first()
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    findings = db.query(Finding).filter(Finding.project_id == project_id, Finding.review_run_id == review_id).all()
-    return findings
+    return db.query(Finding).filter(Finding.project_id == project_id, Finding.review_run_id == review_id).all()

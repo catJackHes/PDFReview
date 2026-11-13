@@ -1,85 +1,109 @@
-# PDF 招投标审查系统
+from __future__ import annotations
 
-本仓库正在按《PDF 招投标审查系统技术方案与实施计划》中的首期目标实现一套可运行的工程骨架：
+import hashlib
+import uuid
+from pathlib import Path
+from typing import Iterable
 
-- 后端：FastAPI + SQLAlchemy + Pydantic
-- 前端：React + TypeScript + Vite
-- 数据库：PostgreSQL（Docker Compose）/SQLite（本地快速启动）
-- 任务：登录、项目管理、PDF 上传、审查任务生成与结果展示
-- 安全：统一 API 错误、鉴权、会话 Cookie / Bearer Token 方案
+from fastapi import HTTPException, UploadFile, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.orm import Session
 
-## 目录结构
+from app.config import settings
+from app.db import get_db
+from app.models import User
 
-- `backend/`：Python API 服务
-- `frontend/`：React Web 应用
-- `docker-compose.yml`：运行 PostgreSQL + Redis + API + Worker 容器
-- `.env.example`：环境变量模板
-- `README.md`：启动说明
+security = HTTPBearer(auto_error=False)
 
-## 运行前提
 
-- Docker + Docker Compose（推荐）
-- Python 3.11+
-- Node.js 20+
+def hash_password(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
-## 快速启动（本地开发）
 
-1. 初始化环境变量
+def create_storage_dirs() -> None:
+    for directory in [settings.upload_dir, settings.render_dir, settings.report_dir]:
+        Path(directory).mkdir(parents=True, exist_ok=True)
 
-```bash
-cp .env.example .env
-```
 
-2. 启动后端
+def generate_id(prefix: str) -> str:
+    return f"{prefix}_{uuid.uuid4().hex[:12]}"
 
-```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
 
-3. 启动前端
+def validate_pdf(file: UploadFile, project_id: str) -> None:
+    if file.filename is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing file name")
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only PDF files are allowed")
+    if file.size and file.size > settings.max_file_size:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File exceeds size limit")
 
-```bash
-cd frontend
-npm install
-npm run dev -- --host 0.0.0.0 --port 5173
-```
 
-4. 打开浏览器访问：
+def sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
 
-- 前端：`http://localhost:5173`
-- API 文档：`http://localhost:8000/docs`
 
-## 默认账号
+def ensure_project_dir(project_id: str) -> Path:
+    root = Path(settings.upload_dir) / project_id
+    root.mkdir(parents=True, exist_ok=True)
+    return root
 
-- 用户名：`admin`
-- 密码：`admin123`
 
-## 生产/容器化启动
+def build_mock_review_findings(file_ids: Iterable[str]) -> list[dict]:
+    findings: list[dict] = []
+    for index, file_id in enumerate(file_ids, start=1):
+        findings.append(
+            {
+                "file_id": file_id,
+                "category": "seal" if index % 2 == 1 else "format",
+                "message": "检测到潜在签章或格式问题，需人工复核。" if index % 2 == 1 else "文档缺少必要的页面信息或结构特征，建议人工确认。",
+                "severity": "medium" if index % 2 == 1 else "low",
+                "confidence": 0.72 if index % 2 == 1 else 0.61,
+                "source": "mock_rules",
+            }
+        )
+    return findings
 
-```bash
-docker compose up --build
-```
 
-## 当前已实现内容
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    db: Session = Depends(get_db),
+) -> User:
+    if credentials is None or not credentials.credentials:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
 
-- 健康检查接口
-- 登录接口与 JWT 认证
-- 项目增删改查
-- PDF 上传（本地文件存储，带 SHA-256 校验）
-- 审查任务创建与 mock 结果
-- React 前端登录和项目列表页
-- 自动生成 OpenAPI 文档
+    from app.auth import decode_access_token
 
-## 后续规划
+    try:
+        subject = decode_access_token(credentials.credentials)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
 
-按照文档的阶段目标，后续将继续落地：
+    user = db.query(User).filter(User.username == subject).first()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    return user
 
-- 规则版本与执行器
-- PDF 页面解析与 OCR 适配器
-- 结果标注、人工复核与审计
-- 报告生成与安全加固
 
+def authenticate_user(db: Session, username: str, password: str) -> User | None:
+    stored_user = db.query(User).filter(User.username == username).first()
+    if not stored_user:
+        return None
+    if stored_user.password_hash != hash_password(password):
+        return None
+    return stored_user
+
+
+def ensure_admin_user(db: Session) -> None:
+    from app.config import settings
+
+    user = db.query(User).filter(User.username == settings.admin_username).first()
+    if user is None:
+        db.add(
+            User(
+                id=f"user_{settings.admin_username}",
+                username=settings.admin_username,
+                password_hash=hash_password(settings.admin_password),
+                is_active=True,
+            )
+        )
+        db.commit()
