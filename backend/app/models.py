@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import DateTime, Float, JSON, String, Text
+from sqlalchemy import DateTime, Float, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -58,6 +58,7 @@ class ProjectFile(Base):
 
 class RuleVersion(Base):
     __tablename__ = "rule_versions"
+    __table_args__ = (UniqueConstraint("rule_key", "version", name="uq_rule_version_key_version"),)
     id: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
     rule_key: Mapped[str] = mapped_column(String(128), index=True, nullable=False)
     version: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -68,6 +69,8 @@ class RuleVersion(Base):
     parameters: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     message_template: Mapped[str] = mapped_column(Text, default="规则命中", nullable=False)
     review_required: Mapped[bool] = mapped_column(default=True, nullable=False)
+    is_enabled: Mapped[bool] = mapped_column(default=True, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(64), nullable=False, default="system")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
 
