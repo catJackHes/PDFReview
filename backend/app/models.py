@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import DateTime, String, Text, Float, JSON
+from sqlalchemy import DateTime, Float, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -60,15 +60,33 @@ class ProjectFile(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
 
+class RuleVersion(Base):
+    __tablename__ = "rule_versions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
+    rule_key: Mapped[str] = mapped_column(String(128), index=True, nullable=False)
+    version: Mapped[str] = mapped_column(String(50), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    category: Mapped[str] = mapped_column(String(80), default="seal", nullable=False)
+    applies_to: Mapped[str] = mapped_column(String(80), default="pdf", nullable=False)
+    severity: Mapped[str] = mapped_column(String(30), default="medium", nullable=False)
+    parameters: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    message_template: Mapped[str] = mapped_column(Text, default="规则命中", nullable=False)
+    review_required: Mapped[bool] = mapped_column(default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+
 class ReviewRun(Base):
     __tablename__ = "review_runs"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
     project_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="queued", nullable=False)
+    phase: Mapped[str] = mapped_column(String(50), default="extracting", nullable=False)
+    progress: Mapped[int] = mapped_column(default=0, nullable=False)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    engine_version: Mapped[str] = mapped_column(String(120), default="mock-engine-v1", nullable=False)
+    engine_version: Mapped[str] = mapped_column(String(120), default="rule_engine_v1", nullable=False)
     config_snapshot: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     created_by: Mapped[str] = mapped_column(String(64), nullable=False)
 
@@ -88,7 +106,21 @@ class Finding(Base):
     review_status: Mapped[str] = mapped_column(String(30), default="pending", nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
     confidence: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
-    source: Mapped[str] = mapped_column(String(80), default="mock_rules", nullable=False)
+    source: Mapped[str] = mapped_column(String(80), default="rule_engine_v1", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class Evidence(Base):
+    __tablename__ = "evidence"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
+    finding_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    file_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    page_number: Mapped[int] = mapped_column(default=1, nullable=False)
+    text_excerpt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    bbox: Mapped[dict] = mapped_column(JSON, default=list, nullable=False)
+    source: Mapped[str] = mapped_column(String(80), default="rule_engine_v1", nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
 

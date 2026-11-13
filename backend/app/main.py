@@ -1,38 +1,45 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-from app.db import get_db
-from app.models import Company
-from app.services import get_current_user
+from app.api.routes.auth import router as auth_router
+from app.api.routes.companies import router as companies_router
+from app.api.routes.health import router as health_router
+from app.api.routes.projects import router as projects_router
+from app.api.routes.rules import router as rules_router
+from app.config import settings
+from app.db import Base, SessionLocal, engine
+from app.services import ensure_admin_user
 
-router = APIRouter(prefix="/companies", tags=["companies"])
+app = FastAPI(title="PDF 招投标审查系统", version="0.1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
-@router.get("")
-def list_companies(
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-) -> list[Company]:
-    return db.query(Company).all()
+@app.on_event("startup")
+def startup_event() -> None:
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        ensure_admin_user(db)
+    finally:
+        db.close()
 
 
-@router.post("")
-def create_company(
-    payload: dict,
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-) -> Company:
-    name = payload.get("canonical_name")
-    if not name:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="canonical_name is required")
-    company = Company(
-        id=f"company_{len(db.query(Company).all()) + 1}",
-        canonical_name=name,
-        is_active=True,
-    )
-    db.add(company)
-    db.commit()
-    db.refresh(company)
-    return company
+app.include_router(health_router, prefix="/api/v1")
+app.include_router(auth_router, prefix="/api/v1")
+app.include_router(projects_router, prefix="/api/v1")
+app.include_router(companies_router, prefix="/api/v1")
+app.include_router(rules_router, prefix="/api/v1")
+
+
+@app.get("/")
+def root() -> dict[str, str]:
+    return {"message": "PDF 招投标审查系统 API 已启动"}

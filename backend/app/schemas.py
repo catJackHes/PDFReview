@@ -60,10 +60,38 @@ class ReviewRequest(BaseModel):
     options: dict[str, Any] = Field(default_factory=dict)
 
 
+class RuleVersionOut(BaseModel):
+    id: str
+    rule_key: str
+    version: str
+    name: str
+    category: str
+    applies_to: str
+    severity: str
+    message_template: str
+    review_required: bool
+    parameters: dict[str, Any]
+    created_at: datetime
+
+
+class EvidenceOut(BaseModel):
+    id: str
+    finding_id: str
+    file_id: Optional[str]
+    page_number: int
+    text_excerpt: Optional[str]
+    bbox: list[float]
+    source: str
+    confidence: float
+    created_at: datetime
+
+
 class ReviewRunOut(BaseModel):
     id: str
     project_id: str
     status: str
+    phase: str
+    progress: int
     started_at: datetime
     completed_at: Optional[datetime]
     engine_version: str

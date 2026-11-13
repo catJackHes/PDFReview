@@ -1,68 +1,96 @@
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Project, ProjectFile, ReviewRun, Finding
-from app.pdf_service import extract_pdf_metadata
+from app.models import Evidence, Finding, Project, ProjectFile, ReviewRun
+from app.review_engine import build_review_findings_for_file_ids
+from app.schemas import FindingOut, ReviewRunOut
 from app.services import get_current_user
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 
-@router.get("/{project_id}/files/{file_id}")
-def get_file_metadata(
+@router.post("/{project_id}/reviews", response_model=ReviewRunOut)
+def create_review(
     project_id: str,
-    file_id: str,
+    payload: dict,
     db: Session = Depends(get_db),
-    current_user: Any = Depends(get_current_user),
-) -> ProjectFile:
-    project = db.query(Project).filter(Project.id == project_id, Project.created_by == current_user.username).first()
-    if project is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-
-    file_record = db.query(ProjectFile).filter(ProjectFile.id == file_id, ProjectFile.project_id == project_id).first()
-    if file_record is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
-    return file_record
-
-
-@router.get("/{project_id}/files/{file_id}/pages")
-def get_file_pages(
-    project_id: str,
-    file_id: str,
-    db: Session = Depends(get_db),
-    current_user: Any = Depends(get_current_user),
-) -> dict[str, Any]:
-    project = db.query(Project).filter(Project.id == project_id, Project.created_by == current_user.username).first()
-    if project is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-
-    file_record = db.query(ProjectFile).filter(ProjectFile.id == file_id, ProjectFile.project_id == project_id).first()
-    if file_record is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
-
-    file_path = Path("./storage/uploads") / file_record.storage_key
-    metadata = extract_pdf_metadata(file_path)
-    return {"file_id": file_id, "page_count": file_record.page_count, "pdf_type": file_record.pdf_type, "pages": metadata.get("pages", [])}
-
-
-@router.get("/{project_id}/reviews/{review_id}")
-def get_review_run(
-    project_id: str,
-    review_id: str,
-    db: Session = Depends(get_db),
-    current_user: Any = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ) -> ReviewRun:
     project = db.query(Project).filter(Project.id == project_id, Project.created_by == current_user.username).first()
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
-    review_run = db.query(ReviewRun).filter(ReviewRun.id == review_id, ReviewRun.project_id == project_id).first()
-    if review_run is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review run not found")
-    return review_run
+    file_ids = payload.get("file_ids", [])
+    run = ReviewRun(
+        id=f"review_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}",
+        project_id=project_id,
+        status="extracting",
+        phase="extracting",
+        progress=10,
+        config_snapshot={"rule_set": payload.get("rule_set", "default"), "options": payload.get("options", {})},
+        created_by=current_user.username,
+    )
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+
+    run.phase = "analyzing"
+    run.progress = 60
+    db.commit()
+
+    findings_payload = build_review_findings_for_file_ids(file_ids, db)
+    for item in findings_payload:
+        finding = Finding(
+            id=f"finding_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}_{len(findings_payload)}",
+            review_run_id=run.id,
+            project_id=project_id,
+            file_id=item["file_id"],
+            category=item["category"],
+            message=item["message"],
+            severity=item["severity"],
+            machine_result="uncertain",
+            review_status="pending",
+            confidence=item["confidence"],
+            source=item["source"],
+        )
+        db.add(finding)
+        db.commit()
+        db.refresh(finding)
+        for evidence_item in item.get("evidence", []):
+            evidence = Evidence(
+                id=f"ev_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}_{len(item.get('evidence', []))}",
+                finding_id=finding.id,
+                file_id=item["file_id"],
+                page_number=int(evidence_item.get("page_number", 1)),
+                text_excerpt=evidence_item.get("text_excerpt"),
+                bbox=evidence_item.get("bbox", []),
+                source=evidence_item.get("source", "rule_engine_v1"),
+                confidence=float(evidence_item.get("confidence", 0.0)),
+            )
+            db.add(evidence)
+
+    run.phase = "completed"
+    run.progress = 100
+    run.status = "completed"
+    run.completed_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(run)
+    return run
+
+
+@router.get("/{project_id}/reviews/{review_id}/findings")
+def list_findings(
+    project_id: str,
+    review_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+) -> list[Finding]:
+    project = db.query(Project).filter(Project.id == project_id, Project.created_by == current_user.username).first()
+    if project is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    return db.query(Finding).filter(Finding.project_id == project_id, Finding.review_run_id == review_id).all()
