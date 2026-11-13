@@ -11,11 +11,12 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 
     app_env: Literal["development", "production"] = "development"
-    secret_key: str = Field(default="change-me")
+    secret_key: str = "change-me"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
-    admin_username: str = "admin"
-    admin_password: str = "admin123"
+    # The initial account is created only when both values are explicitly configured.
+    admin_username: str | None = None
+    admin_password: str | None = None
     database_url: str = "sqlite:///./pdfreview.db"
     redis_url: str = "redis://localhost:6379/0"
     queue_name: str = "pdfreview"
@@ -32,6 +33,8 @@ class Settings(BaseSettings):
         if self.app_env == "production":
             if len(self.secret_key) < 32 or self.secret_key == "change-me":
                 raise ValueError("Production SECRET_KEY must be at least 32 characters")
+            if not self.admin_username or not self.admin_password:
+                raise ValueError("Production ADMIN_USERNAME and ADMIN_PASSWORD must be configured")
             if len(self.admin_password) < 12 or self.admin_password == "admin123":
                 raise ValueError("Production ADMIN_PASSWORD must be at least 12 characters")
         return self

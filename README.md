@@ -1,30 +1,29 @@
 # PDF 招投标审查系统
 
-本仓库按技术方案逐步实现本地运行的 PDF 辅助审查系统。当前是开发/MVP 阶段：包含项目与文件管理、PyMuPDF 页面预览与文本读取、后台 RQ 审查任务、人工复核/标注和 HTML/JSON 报告入口。
+本仓库按《PDF 招投标审查系统技术方案与实施计划》迭代，使用 FastAPI + SQLAlchemy 后端、React + TypeScript + Vite 前端。
 
-## 数据库迁移
+## 当前阶段
 
-新数据库由 Alembic 管理。Compose 启动 API 前会执行 `alembic upgrade head`。开发环境可手动执行：
+MVP 原型支持项目/PDF 文件管理、页面预览与文本读取、规则审查雏形、人工复核/标注和 HTML/JSON 报告。OCR、生产级数据库迁移升级、任务幂等恢复及完整安全验收仍未完成。扫描件和无文本证据不得被自动视为通过；系统输出不能代替法律审查。
+
+开发进度交接请优先阅读 [`DEVLOG.md`](DEVLOG.md)，每轮工作后追加简短记录。
+
+## 本地开发
+
+复制 `.env.example` 为 `.env`，将示例密钥和管理员口令替换为本地强随机值。首次启动时，只有配置 `ADMIN_USERNAME` 与 `ADMIN_PASSWORD` 才会创建初始管理员；不开放公开注册。已有 SHA-256 口令在成功登录时会升级为 Argon2id。
 
 ```bash
 cd backend
-alembic upgrade head
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
 ```
-
-当前初始迁移面向空数据库。原先由 `create_all` 创建的开发数据库应先备份；请勿直接在有重要数据的数据库上执行初始迁移。迁移与既有 schema 对齐策略后续补充。
-
-## 开发交接
-
-每轮变更、当前限制和下一步记录在 [`DEVLOG.md`](DEVLOG.md)，新会话请先读该文件再检查相关代码。
-
-## 运行
 
 ```bash
-cp .env.example .env
-# 编辑 .env 设置足够强的 SECRET_KEY 和 ADMIN_PASSWORD
-docker compose up --build
+cd frontend
+npm install
+npm run dev
 ```
 
-打开 `http://localhost:8000/docs`。前端仍按 frontend 目录的 Vite 开发方式单独运行。
-
-> 当前 OCR 尚未接入；文本关键词规则不适用于纯扫描件。规则结果只辅助定位和复核，不是法律意见或自动合规结论。当前尚未运行自动化测试。
+浏览器访问 `http://localhost:5173`，API 文档为 `http://localhost:8000/docs`。
