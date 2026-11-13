@@ -1,176 +1,47 @@
-body {
-  margin: 0;
-  font-family: 'Segoe UI', sans-serif;
-  background: #f4f6fb;
-  color: #111827;
-}
+from __future__ import annotations
 
-* {
-  box-sizing: border-box;
-}
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-button,
-input {
-  font: inherit;
-}
+from app.api.routes.auth import router as auth_router
+from app.api.routes.companies import router as companies_router
+from app.api.routes.health import router as health_router
+from app.api.routes.projects import router as projects_router
+from app.api.routes.reviews import router as reviews_router
+from app.api.routes.rules import router as rules_router
+from app.config import settings
+from app.db import Base, SessionLocal, engine
+from app.services import ensure_admin_user
 
-button {
-  border: none;
-  border-radius: 8px;
-  padding: 10px 16px;
-  background: #2563eb;
-  color: white;
-  cursor: pointer;
-}
+app = FastAPI(title="PDF 招投标审查系统", version="0.2.0")
 
-button.secondary {
-  background: #e5e7eb;
-  color: #111827;
-}
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"] ,
+)
 
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
 
-.page-shell {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 32px;
-}
+@app.on_event("startup")
+def startup_event() -> None:
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        ensure_admin_user(db)
+    finally:
+        db.close()
 
-.card {
-  background: white;
-  border-radius: 16px;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
-  padding: 24px;
-  width: min(100%, 980px);
-}
 
-.auth-card {
-  max-width: 420px;
-}
+app.include_router(health_router, prefix="/api/v1")
+app.include_router(auth_router, prefix="/api/v1")
+app.include_router(projects_router, prefix="/api/v1")
+app.include_router(companies_router, prefix="/api/v1")
+app.include_router(rules_router, prefix="/api/v1")
+app.include_router(reviews_router, prefix="/api/v1")
 
-.auth-card h1,
-.dashboard h1 {
-  margin: 0 0 8px;
-}
 
-.auth-card p {
-  color: #4b5563;
-  margin-bottom: 20px;
-}
-
-label {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 16px;
-  font-weight: 600;
-}
-
-input {
-  width: 100%;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  padding: 10px 12px;
-}
-
-.operator-row {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  margin: 20px 0;
-}
-
-.operator-row input {
-  flex: 1;
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-}
-
-.lower-grid {
-  margin-top: 20px;
-}
-
-.panel {
-  background: #f9fafb;
-  border-radius: 12px;
-  padding: 16px;
-}
-
-.panel h2 {
-  margin-top: 0;
-}
-
-.list-box {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.list-box.compact li {
-  font-size: 0.9rem;
-}
-
-.list-box li {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  padding: 12px;
-  background: white;
-  cursor: pointer;
-}
-
-.list-box li.selected {
-  border-color: #3b82f6;
-  background: #eff6ff;
-}
-
-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-small {
-  color: #64748b;
-}
-
-.active-project {
-  margin-bottom: 12px;
-  padding: 12px 16px;
-  background: #eff6ff;
-  border-radius: 10px;
-  color: #1d4ed8;
-}
-
-.upload-box {
-  border: 1px dashed #93c5fd;
-  border-radius: 10px;
-  background: #f8fbff;
-  padding: 10px;
-}
-
-@media (max-width: 768px) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
-
-  .operator-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-}
+@app.get("/")
+def root() -> dict[str, str]:
+    return {"message": "PDF 招投标审查系统 API 已启动"}

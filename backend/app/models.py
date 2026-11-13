@@ -118,9 +118,22 @@ class Evidence(Base):
     file_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     page_number: Mapped[int] = mapped_column(default=1, nullable=False)
     text_excerpt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    bbox: Mapped[dict] = mapped_column(JSON, default=list, nullable=False)
+    bbox: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     source: Mapped[str] = mapped_column(String(80), default="rule_engine_v1", nullable=False)
     confidence: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class ReviewAction(Base):
+    __tablename__ = "review_actions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, index=True)
+    finding_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    actor_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    action: Mapped[str] = mapped_column(String(40), nullable=False)
+    previous_status: Mapped[str] = mapped_column(String(30), nullable=False)
+    new_status: Mapped[str] = mapped_column(String(30), nullable=False)
+    remark: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
 
@@ -132,5 +145,5 @@ class AuditEvent(Base):
     action: Mapped[str] = mapped_column(String(120), nullable=False)
     resource_type: Mapped[str] = mapped_column(String(80), nullable=False)
     resource_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    metadata: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
