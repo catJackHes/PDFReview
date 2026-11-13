@@ -1,3 +1,7 @@
-本轮完成：审查 API 现在创建快照并投递 Redis/RQ；Worker 独立会话执行规则并更新阶段/进度，保存证据和审计。补回审查历史/详情/结果查询路由，并修复先前提交的 requirements.txt 路径误覆盖（原文件内容实际被错误写入代码）。
+## 2026-11-13 — 数据库迁移基线
 
-注意：未运行测试（按用户要求）。Redis 不可用时，任务会持久化为 failed 并返回运行 ID/状态；启动 worker：`cd backend && python -m rq worker --url "$REDIS_URL" "$QUEUE_NAME"`。`Idempotency-Key` 目前记录在审查快照中，但还没有数据库唯一约束/重复请求回用，后续需迁移支持。
+- 目标：不再由 API `create_all` 隐式创建/变更 schema，为后续版本变更建立明确迁移入口。
+- 改动：加入 Alembic 固定初始 schema revision；配置 API 容器先运行 `alembic upgrade head`；移除应用启动时 `create_all`；补充 SQLite batch migration 配置、Redis healthcheck 和迁移使用说明。
+- 未完成/注意：迁移只面向空数据库。已有 `create_all` 开发库尚无安全 adoption/数据迁移方案；模型关系约束与后续 incremental migrations 仍需补齐。管理员口令哈希仍需从 SHA-256 改为 Argon2id。
+- 验证：未运行测试（按用户要求）。
+- 下一步：按迁移文件管理 schema 变更；安全迁移口令哈希和受控初始化；处理审查任务幂等与队列恢复。

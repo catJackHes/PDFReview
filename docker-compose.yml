@@ -23,6 +23,11 @@ services:
     container_name: pdfreview-redis
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
   api:
     build:
@@ -35,11 +40,12 @@ services:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/pdfreview
       REDIS_URL: redis://redis:6379/0
       APP_ENV: production
+    command: ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     ports:
       - "8000:8000"
     volumes:
@@ -57,9 +63,12 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/pdfreview
       REDIS_URL: redis://redis:6379/0
+      APP_ENV: production
     depends_on:
-      - redis
-      - postgres
+      api:
+        condition: service_started
+      redis:
+        condition: service_healthy
     volumes:
       - ./backend:/app
       - ./storage:/app/storage

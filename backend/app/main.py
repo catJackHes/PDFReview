@@ -11,10 +11,10 @@ from app.api.routes.projects import router as projects_router
 from app.api.routes.reviews import router as reviews_router
 from app.api.routes.rules import router as rules_router
 from app.config import settings
-from app.db import Base, SessionLocal, engine
+from app.db import SessionLocal
 from app.services import ensure_admin_user
 
-app = FastAPI(title="PDF 招投标审查系统", version="0.3.0")
+app = FastAPI(title="PDF 招投标审查系统", version="0.4.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
@@ -27,7 +27,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup_event() -> None:
-    Base.metadata.create_all(bind=engine)
+    # Schema is managed by Alembic at container startup, not create_all.
     db = SessionLocal()
     try:
         ensure_admin_user(db)
