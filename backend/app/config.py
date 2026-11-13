@@ -1,51 +1,5 @@
-from __future__ import annotations
-
-from pathlib import Path
-from typing import Literal
-
-from pydantic import Field, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
-
-    app_env: Literal["development", "production"] = "development"
-    secret_key: str = "change-me"
-    algorithm: str = "HS256"
-    access_token_expire_minutes: int = 60
-    # The initial account is created only when both values are explicitly configured.
-    admin_username: str | None = None
-    admin_password: str | None = None
-    database_url: str = "sqlite:///./pdfreview.db"
-    redis_url: str = "redis://localhost:6379/0"
-    queue_name: str = "pdfreview"
-    review_job_timeout_seconds: int = 1800
-    upload_dir: str = "./storage/uploads"
-    render_dir: str = "./storage/render"
-    report_dir: str = "./storage/reports"
-    max_file_size: int = 10 * 1024 * 1024
-    max_pages: int = 200
-    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
-
-    @model_validator(mode="after")
-    def validate_production_secrets(self) -> "Settings":
-        if self.app_env == "production":
-            if len(self.secret_key) < 32 or self.secret_key == "change-me":
-                raise ValueError("Production SECRET_KEY must be at least 32 characters")
-            if not self.admin_username or not self.admin_password:
-                raise ValueError("Production ADMIN_USERNAME and ADMIN_PASSWORD must be configured")
-            if len(self.admin_password) < 12 or self.admin_password == "admin123":
-                raise ValueError("Production ADMIN_PASSWORD must be at least 12 characters")
-        return self
-
-    @property
-    def cors_origins_list(self) -> list[str]:
-        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
-
-    @property
-    def storage_root(self) -> Path:
-        return Path(__file__).resolve().parent.parent / "storage"
-
-
-settings = Settings()
+    ocr_enabled: bool = False
+    ocr_language: str = "ch"
+    ocr_dpi: int = 180
+    ocr_min_text_chars: int = 24
+    ocr_model_dir: str | None = None
