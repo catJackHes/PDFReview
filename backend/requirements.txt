@@ -1,5 +1,3 @@
-# PDF review dependencies. PaddleOCR is intentionally not installed by default;
-# model/runtime and license need validation against approved samples and deployment environment.
 fastapi==0.115.0
 uvicorn[standard]==0.30.1
 pydantic==2.9.2
