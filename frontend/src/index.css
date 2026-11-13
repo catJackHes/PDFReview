@@ -1,0 +1,309 @@
+import { useEffect, useMemo, useState } from 'react';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+
+type Project = {
+  id: string;
+  name: string;
+  description?: string | null;
+  status: string;
+  created_by: string;
+  created_at: string;
+};
+
+type ProjectFile = {
+  id: string;
+  project_id: string;
+  display_name: string;
+  file_type: string;
+  size_bytes: number;
+  page_count: number;
+  pdf_type: string;
+  status: string;
+  sha256: string;
+  storage_key: string;
+  created_at: string;
+};
+
+type ReviewRun = {
+  id: string;
+  project_id: string;
+  status: string;
+  engine_version: string;
+  created_by: string;
+  started_at: string;
+  completed_at?: string | null;
+};
+
+type Finding = {
+  id: string;
+  review_run_id: string;
+  project_id: string;
+  file_id?: string | null;
+  category: string;
+  message: string;
+  severity: string;
+  confidence: number;
+  review_status: string;
+};
+
+export default function App() {
+  const [token, setToken] = useState<string | null>(localStorage.getItem('pdfreview_token'));
+  const [username, setUsername] = useState('admin');
+  const [password, setPassword] = useState('admin123');
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [files, setFiles] = useState<ProjectFile[]>([]);
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+  const [projectName, setProjectName] = useState('样例招投标项目');
+  const [reviewRuns, setReviewRuns] = useState<ReviewRun[]>([]);
+  const [findings, setFindings] = useState<Finding[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const api = (path: string, options: RequestInit = {}) => {
+    return fetch(`${API_URL}${path}`, {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    }).then(async (res) => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.detail || 'Request failed');
+      }
+      return data;
+    });
+  };
+
+  const login = async () => {
+    const result = await api('/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    setToken(result.access_token);
+    localStorage.setItem('pdfreview_token', result.access_token);
+  };
+
+  const logout = () => {
+    setToken(null);
+    localStorage.removeItem('pdfreview_token');
+  };
+
+  const loadProjects = async () => {
+    const data = await api('/projects');
+    setProjects(data);
+    if (data.length && !currentProjectId) {
+      setCurrentProjectId(data[0].id);
+    }
+  };
+
+  const loadProjectFiles = async (projectId: string) => {
+    const data = await api(`/projects/${projectId}/files`);
+    setFiles(data);
+  };
+
+  const loadProjectRuns = async (projectId: string) => {
+    const data = await api(`/projects/${projectId}/reviews`);
+    setReviewRuns(data);
+    if (data.length > 0) {
+      const latestRun = data[0];
+      const result = await api(`/projects/${projectId}/reviews/${latestRun.id}/findings`);
+      setFindings(result);
+    } else {
+      setFindings([]);
+    }
+  };
+
+  const createProject = async () => {
+    const data = await api('/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: projectName, description: '从前端创建的样例项目' }),
+    });
+    setProjectName('');
+    await loadProjects();
+    setCurrentProjectId(data.id);
+  };
+
+  const triggerReview = async () => {
+    if (!currentProjectId) return;
+    const payload = {
+      file_ids: files.map((file) => file.id),
+      rule_set: 'default',
+      options: { enable_ocr: true },
+    };
+
+    const result = await api(`/projects/${currentProjectId}/reviews`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    setReviewRuns((prev) => [result, ...prev]);
+    const findingsResult = await api(`/projects/${currentProjectId}/reviews/${result.id}/findings`);
+    setFindings(findingsResult);
+  };
+
+  const uploadFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = event.target.files?.[0];
+    if (!selected || !currentProjectId) return;
+
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append('file', selected);
+    formData.append('file_type', 'contract');
+
+    try {
+      await fetch(`${API_URL}/projects/${currentProjectId}/files`, {
+        method: 'POST',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: formData,
+      }).then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.detail || 'Upload failed');
+        }
+        await loadProjectFiles(currentProjectId);
+      });
+    } finally {
+      setIsUploading(false);
+      event.target.value = '';
+    }
+  };
+
+  useEffect(() => {
+    if (token) {
+      loadProjects().catch((error) => console.error(error));
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (!currentProjectId || !token) return;
+    loadProjectFiles(currentProjectId).catch((error) => console.error(error));
+    loadProjectRuns(currentProjectId).catch((error) => console.error(error));
+  }, [currentProjectId, token]);
+
+  const currentProject = useMemo(
+    () => projects.find((project) => project.id === currentProjectId) || null,
+    [projects, currentProjectId],
+  );
+
+  if (!token) {
+    return (
+      <div className="page-shell">
+        <div className="card auth-card">
+          <h1>PDF 招投标审查系统</h1>
+          <p>登录进入项目与审查流程</p>
+          <label>
+            用户名
+            <input value={username} onChange={(e) => setUsername(e.target.value)} />
+          </label>
+          <label>
+            密码
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          </label>
+          <button onClick={login}>登录</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="page-shell">
+      <div className="card dashboard">
+        <header>
+          <div>
+            <h1>项目管理</h1>
+            <small>已登录：{username}</small>
+          </div>
+          <button className="secondary" onClick={logout}>退出</button>
+        </header>
+
+        <section className="operator-row">
+          <input value={projectName} onChange={(e) => setProjectName(e.target.value)} placeholder="项目名称" />
+          <button onClick={createProject}>新建项目</button>
+          <button className="secondary" onClick={triggerReview}>触发审查</button>
+        </section>
+
+        {currentProject && (
+          <div className="active-project">
+            <strong>当前项目：</strong> {currentProject.name}
+          </div>
+        )}
+
+        <div className="grid">
+          <div className="panel">
+            <h2>项目列表</h2>
+            {projects.length === 0 ? <p>暂无项目</p> : (
+              <ul className="list-box">
+                {projects.map((project) => (
+                  <li
+                    key={project.id}
+                    className={currentProjectId === project.id ? 'selected' : ''}
+                    onClick={() => setCurrentProjectId(project.id)}
+                  >
+                    <strong>{project.name}</strong>
+                    <span>{project.status}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="panel">
+            <h2>文件</h2>
+            <label className="upload-box">
+              <span>上传 PDF</span>
+              <input type="file" accept=".pdf" onChange={uploadFile} disabled={!currentProjectId || isUploading} />
+            </label>
+            {files.length === 0 ? <p>暂无文件</p> : (
+              <ul className="list-box compact">
+                {files.map((file) => (
+                  <li key={file.id}>
+                    <strong>{file.display_name}</strong>
+                    <span>{file.pdf_type} / {file.page_count} 页</span>
+                    <small>{file.status}</small>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+
+        <div className="grid lower-grid">
+          <div className="panel">
+            <h2>审查运行</h2>
+            {reviewRuns.length === 0 ? <p>尚未创建审查运行</p> : (
+              <ul className="list-box">
+                {reviewRuns.map((run) => (
+                  <li key={run.id}>
+                    <strong>{run.status}</strong>
+                    <span>{run.engine_version}</span>
+                    <small>{new Date(run.started_at).toLocaleString()}</small>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="panel">
+            <h2>审查结论</h2>
+            {findings.length === 0 ? <p>暂无识别结果</p> : (
+              <ul className="list-box compact">
+                {findings.map((finding) => (
+                  <li key={finding.id}>
+                    <strong>{finding.category}</strong>
+                    <span>{finding.severity} / {finding.review_status}</span>
+                    <small>{finding.message}</small>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

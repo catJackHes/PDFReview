@@ -1,109 +1,176 @@
-from __future__ import annotations
+body {
+  margin: 0;
+  font-family: 'Segoe UI', sans-serif;
+  background: #f4f6fb;
+  color: #111827;
+}
 
-import hashlib
-import uuid
-from pathlib import Path
-from typing import Iterable
+* {
+  box-sizing: border-box;
+}
 
-from fastapi import HTTPException, UploadFile, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy.orm import Session
+button,
+input {
+  font: inherit;
+}
 
-from app.config import settings
-from app.db import get_db
-from app.models import User
+button {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 16px;
+  background: #2563eb;
+  color: white;
+  cursor: pointer;
+}
 
-security = HTTPBearer(auto_error=False)
+button.secondary {
+  background: #e5e7eb;
+  color: #111827;
+}
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
 
-def hash_password(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+.page-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
 
+.card {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  padding: 24px;
+  width: min(100%, 980px);
+}
 
-def create_storage_dirs() -> None:
-    for directory in [settings.upload_dir, settings.render_dir, settings.report_dir]:
-        Path(directory).mkdir(parents=True, exist_ok=True)
+.auth-card {
+  max-width: 420px;
+}
 
+.auth-card h1,
+.dashboard h1 {
+  margin: 0 0 8px;
+}
 
-def generate_id(prefix: str) -> str:
-    return f"{prefix}_{uuid.uuid4().hex[:12]}"
+.auth-card p {
+  color: #4b5563;
+  margin-bottom: 20px;
+}
 
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-weight: 600;
+}
 
-def validate_pdf(file: UploadFile, project_id: str) -> None:
-    if file.filename is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing file name")
-    if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only PDF files are allowed")
-    if file.size and file.size > settings.max_file_size:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File exceeds size limit")
+input {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
 
+.operator-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 20px 0;
+}
 
-def sha256_bytes(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
+.operator-row input {
+  flex: 1;
+}
 
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
 
-def ensure_project_dir(project_id: str) -> Path:
-    root = Path(settings.upload_dir) / project_id
-    root.mkdir(parents=True, exist_ok=True)
-    return root
+.lower-grid {
+  margin-top: 20px;
+}
 
+.panel {
+  background: #f9fafb;
+  border-radius: 12px;
+  padding: 16px;
+}
 
-def build_mock_review_findings(file_ids: Iterable[str]) -> list[dict]:
-    findings: list[dict] = []
-    for index, file_id in enumerate(file_ids, start=1):
-        findings.append(
-            {
-                "file_id": file_id,
-                "category": "seal" if index % 2 == 1 else "format",
-                "message": "检测到潜在签章或格式问题，需人工复核。" if index % 2 == 1 else "文档缺少必要的页面信息或结构特征，建议人工确认。",
-                "severity": "medium" if index % 2 == 1 else "low",
-                "confidence": 0.72 if index % 2 == 1 else 0.61,
-                "source": "mock_rules",
-            }
-        )
-    return findings
+.panel h2 {
+  margin-top: 0;
+}
 
+.list-box {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(security),
-    db: Session = Depends(get_db),
-) -> User:
-    if credentials is None or not credentials.credentials:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+.list-box.compact li {
+  font-size: 0.9rem;
+}
 
-    from app.auth import decode_access_token
+.list-box li {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 12px;
+  background: white;
+  cursor: pointer;
+}
 
-    try:
-        subject = decode_access_token(credentials.credentials)
-    except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
+.list-box li.selected {
+  border-color: #3b82f6;
+  background: #eff6ff;
+}
 
-    user = db.query(User).filter(User.username == subject).first()
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    return user
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 
+small {
+  color: #64748b;
+}
 
-def authenticate_user(db: Session, username: str, password: str) -> User | None:
-    stored_user = db.query(User).filter(User.username == username).first()
-    if not stored_user:
-        return None
-    if stored_user.password_hash != hash_password(password):
-        return None
-    return stored_user
+.active-project {
+  margin-bottom: 12px;
+  padding: 12px 16px;
+  background: #eff6ff;
+  border-radius: 10px;
+  color: #1d4ed8;
+}
 
+.upload-box {
+  border: 1px dashed #93c5fd;
+  border-radius: 10px;
+  background: #f8fbff;
+  padding: 10px;
+}
 
-def ensure_admin_user(db: Session) -> None:
-    from app.config import settings
+@media (max-width: 768px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
 
-    user = db.query(User).filter(User.username == settings.admin_username).first()
-    if user is None:
-        db.add(
-            User(
-                id=f"user_{settings.admin_username}",
-                username=settings.admin_username,
-                password_hash=hash_password(settings.admin_password),
-                is_active=True,
-            )
-        )
-        db.commit()
+  .operator-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
